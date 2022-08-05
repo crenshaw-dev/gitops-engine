@@ -140,3 +140,9 @@ type ResourceSyncResult struct {
 	// indicates the particular phase of the sync that this is for
 	SyncPhase SyncPhase
 }
+
+//NameSpaceMetaData contains annotations, labels to manage the namespace
+type NameSpaceMetaData struct {
+	Annotations map[string]string
+	Labels      map[string]string
+}

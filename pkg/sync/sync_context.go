@@ -152,10 +152,17 @@ func WithResourceModificationChecker(enabled bool, diffResults *diff.DiffResultL
 }
 
 // WithNamespaceCreation will create non-exist namespace
-func WithNamespaceCreation(createNamespace bool, namespaceModifier func(*unstructured.Unstructured) bool) SyncOpt {
+func WithNamespaceCreation(createNamespace bool, nsMetaData string, namespaceModifier func(*unstructured.Unstructured) bool) SyncOpt {
 	return func(ctx *syncContext) {
 		ctx.createNamespace = createNamespace
 		ctx.namespaceModifier = namespaceModifier
+		nsMetaDataObj := common.NameSpaceMetaData{}
+		if nsMetaData != "" {
+			err := json.Unmarshal([]byte(nsMetaData), &nsMetaDataObj)
+			if err == nil {
+				ctx.nsMetaData = &nsMetaDataObj
+			}
+		}
 	}
 }
 
@@ -349,6 +356,7 @@ type syncContext struct {
 
 	createNamespace   bool
 	namespaceModifier func(*unstructured.Unstructured) bool
+	nsMetaData        *common.NameSpaceMetaData
 
 	syncWaveHook common.SyncWaveHook
 
@@ -775,7 +783,14 @@ func (sc *syncContext) autoCreateNamespace(tasks syncTasks) syncTasks {
 	}
 
 	if isNamespaceCreationNeeded {
-		nsSpec := &v1.Namespace{TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: kube.NamespaceKind}, ObjectMeta: metav1.ObjectMeta{Name: sc.namespace}}
+		nsSpec := &v1.Namespace{TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: kube.NamespaceKind}, ObjectMeta: metav1.ObjectMeta{Name: sc.namespace, Annotations: sc.nsMetaData.Annotations}}
+
+		//Set annotations & labels provided in appconfig
+		if sc.nsMetaData != nil {
+			nsSpec.Annotations = sc.nsMetaData.Annotations
+			nsSpec.Labels = sc.nsMetaData.Labels
+		}
+
 		unstructuredObj, err := kube.ToUnstructured(nsSpec)
 		if err == nil {
 			liveObj, err := sc.kubectl.GetResource(context.TODO(), sc.config, unstructuredObj.GroupVersionKind(), unstructuredObj.GetName(), metav1.NamespaceNone)
