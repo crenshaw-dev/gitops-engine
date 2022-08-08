@@ -728,9 +728,11 @@ func TestNamespaceAutoCreation(t *testing.T) {
 	syncCtx := newTestSyncCtx()
 	syncCtx.createNamespace = true
 	syncCtx.namespace = FakeArgoCDNamespace
-	namespace.SetName(FakeArgoCDNamespace)
 
-	task, err := createNamespaceTask(syncCtx.namespace)
+	namespace.SetName(FakeArgoCDNamespace)
+	syncCtx.syncRes = map[string]synccommon.ResourceSyncResult{}
+
+	task, err := createNamespaceTask(syncCtx.namespace, false)
 	assert.NoError(t, err, "Failed creating test data: namespace task")
 
 	//Namespace auto creation pre-sync task should not be there
@@ -781,7 +783,6 @@ func TestNamespaceAutoCreation(t *testing.T) {
 			HookPhase:   task.operationState,
 			SyncPhase:   task.phase,
 		}
-		syncCtx.syncRes = map[string]synccommon.ResourceSyncResult{}
 		syncCtx.syncRes[task.resultKey()] = res
 
 		tasks, successful := syncCtx.getSyncTasks()
@@ -791,10 +792,49 @@ func TestNamespaceAutoCreation(t *testing.T) {
 		assert.Contains(t, tasks, task)
 	})
 
+	t.Run("pre-sync task created with namespace meta data", func(t *testing.T) {
+		syncCtx.resources = groupResources(ReconciliationResult{
+			Live:   []*unstructured.Unstructured{nil},
+			Target: []*unstructured.Unstructured{pod},
+		})
+
+		res := synccommon.ResourceSyncResult{
+			ResourceKey: kube.GetResourceKey(task.obj()),
+			Version:     task.version(),
+			Status:      task.syncStatus,
+			Message:     task.message,
+			HookType:    task.hookType(),
+			HookPhase:   task.operationState,
+			SyncPhase:   task.phase,
+		}
+		task, err := createNamespaceTask(syncCtx.namespace, true)
+		assert.NoError(t, err, "Failed creating test data: namespace task")
+
+		syncCtx.syncRes[task.resultKey()] = res
+
+		syncCtx.nsMetaData = map[string]interface{}{"annotations": map[string]string{
+			"fake.annotation.io/fake1": "v1"},
+			"labels": map[string]string{
+				"fake.label.io/this": "v1"}}
+
+		tasks, successful := syncCtx.getSyncTasks()
+
+		assert.True(t, successful)
+		assert.Len(t, tasks, 2)
+		assert.Contains(t, tasks, task)
+		assert.Equal(t, tasks[0].targetObj.GetAnnotations(), syncCtx.nsMetaData["annotations"])
+		assert.Equal(t, tasks[0].targetObj.GetLabels(), syncCtx.nsMetaData["labels"])
+	})
+
 }
 
-func createNamespaceTask(namespace string) (*syncTask, error) {
+func createNamespaceTask(namespace string, nsMetaData bool) (*syncTask, error) {
 	nsSpec := &corev1.Namespace{TypeMeta: v1.TypeMeta{APIVersion: "v1", Kind: kube.NamespaceKind}, ObjectMeta: v1.ObjectMeta{Name: namespace}}
+	if nsMetaData {
+		nsSpec.Annotations = map[string]string{"fake.annotation.io/fake1": "v1"}
+		nsSpec.Labels = map[string]string{"fake.label.io/this": "v1"}
+
+	}
 	unstructuredObj, err := kube.ToUnstructured(nsSpec)
 
 	task := &syncTask{phase: synccommon.SyncPhasePreSync, targetObj: unstructuredObj}

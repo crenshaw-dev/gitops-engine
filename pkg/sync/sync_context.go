@@ -152,17 +152,11 @@ func WithResourceModificationChecker(enabled bool, diffResults *diff.DiffResultL
 }
 
 // WithNamespaceCreation will create non-exist namespace
-func WithNamespaceCreation(createNamespace bool, nsMetaData string, namespaceModifier func(*unstructured.Unstructured) bool) SyncOpt {
+func WithNamespaceCreation(createNamespace bool, nsMetaData map[string]interface{}, namespaceModifier func(*unstructured.Unstructured) bool) SyncOpt {
 	return func(ctx *syncContext) {
 		ctx.createNamespace = createNamespace
 		ctx.namespaceModifier = namespaceModifier
-		nsMetaDataObj := common.NameSpaceMetaData{}
-		if nsMetaData != "" {
-			err := json.Unmarshal([]byte(nsMetaData), &nsMetaDataObj)
-			if err == nil {
-				ctx.nsMetaData = &nsMetaDataObj
-			}
-		}
+		ctx.nsMetaData = nsMetaData
 	}
 }
 
@@ -356,7 +350,7 @@ type syncContext struct {
 
 	createNamespace   bool
 	namespaceModifier func(*unstructured.Unstructured) bool
-	nsMetaData        *common.NameSpaceMetaData
+	nsMetaData        map[string]interface{}
 
 	syncWaveHook common.SyncWaveHook
 
@@ -783,13 +777,23 @@ func (sc *syncContext) autoCreateNamespace(tasks syncTasks) syncTasks {
 	}
 
 	if isNamespaceCreationNeeded {
-		nsSpec := &v1.Namespace{TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: kube.NamespaceKind}, ObjectMeta: metav1.ObjectMeta{Name: sc.namespace}}
 
-		//Set annotations & labels provided in appconfig
-		if sc.nsMetaData != nil {
-			nsSpec.Annotations = sc.nsMetaData.Annotations
-			nsSpec.Labels = sc.nsMetaData.Labels
+		a := make([]map[string]string, 2)
+		for k, v := range sc.nsMetaData {
+			if t, ok := v.(interface{}); ok {
+				// Convert map to json string
+				switch jsonStr, _ := json.Marshal(t); jsonStr != nil {
+				case k == common.Annotation:
+					json.Unmarshal(jsonStr, &a[0])
+				case k == common.Labels:
+					json.Unmarshal(jsonStr, &a[1])
+				default:
+					continue
+				}
+			}
 		}
+
+		nsSpec := &v1.Namespace{TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: kube.NamespaceKind}, ObjectMeta: metav1.ObjectMeta{Name: sc.namespace, Annotations: a[0], Labels: a[1]}}
 
 		unstructuredObj, err := kube.ToUnstructured(nsSpec)
 		if err == nil {

@@ -29,6 +29,10 @@ const (
 	SyncOptionReplace = "Replace=true"
 	// Sync option that enables use of --server-side flag instead of client-side
 	SyncOptionServerSideApply = "ServerSideApply=true"
+
+	// User define Object MetaData - annotations, labels
+	Annotation = "annotations"
+	Labels     = "labels"
 )
 
 type PermissionValidator func(un *unstructured.Unstructured, res *metav1.APIResource) error
@@ -139,10 +143,4 @@ type ResourceSyncResult struct {
 	HookPhase OperationPhase
 	// indicates the particular phase of the sync that this is for
 	SyncPhase SyncPhase
-}
-
-//NameSpaceMetaData contains annotations, labels to manage the namespace
-type NameSpaceMetaData struct {
-	Annotations map[string]string
-	Labels      map[string]string
 }
