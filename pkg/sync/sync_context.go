@@ -784,9 +784,17 @@ func (sc *syncContext) autoCreateNamespace(tasks syncTasks) syncTasks {
 				// Convert map to json string
 				switch jsonStr, _ := json.Marshal(t); jsonStr != nil {
 				case k == common.Annotation:
-					json.Unmarshal(jsonStr, &a[0])
+					err := json.Unmarshal(jsonStr, &a[0])
+					if err != nil {
+						sc.setOperationPhase(common.OperationFailed, fmt.Sprintf("Namespace auto creation failed due to invalid json: %s", err))
+						return tasks
+					}
 				case k == common.Labels:
-					json.Unmarshal(jsonStr, &a[1])
+					err := json.Unmarshal(jsonStr, &a[1])
+					if err != nil {
+						sc.setOperationPhase(common.OperationFailed, fmt.Sprintf("Namespace auto creation failed due to invalid: %s", err))
+						return tasks
+					}
 				default:
 					continue
 				}
