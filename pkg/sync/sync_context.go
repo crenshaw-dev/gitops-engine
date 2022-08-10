@@ -152,11 +152,12 @@ func WithResourceModificationChecker(enabled bool, diffResults *diff.DiffResultL
 }
 
 // WithNamespaceCreation will create non-exist namespace
-func WithNamespaceCreation(createNamespace bool, nsMetaData map[string]interface{}, namespaceModifier func(*unstructured.Unstructured) bool) SyncOpt {
+func WithNamespaceCreation(createNamespace bool, annotations map[string]string, labels map[string]string, namespaceModifier func(*unstructured.Unstructured) bool) SyncOpt {
 	return func(ctx *syncContext) {
 		ctx.createNamespace = createNamespace
 		ctx.namespaceModifier = namespaceModifier
-		ctx.nsMetaData = nsMetaData
+		ctx.createNamespaceAnnotations = annotations
+		ctx.createNamespaceLabels = labels
 	}
 }
 
@@ -348,9 +349,10 @@ type syncContext struct {
 	// lock to protect concurrent updates of the result list
 	lock sync.Mutex
 
-	createNamespace   bool
-	namespaceModifier func(*unstructured.Unstructured) bool
-	nsMetaData        map[string]interface{}
+	createNamespace            bool
+	namespaceModifier          func(*unstructured.Unstructured) bool
+	createNamespaceAnnotations map[string]string
+	createNamespaceLabels      map[string]string
 
 	syncWaveHook common.SyncWaveHook
 
@@ -777,31 +779,7 @@ func (sc *syncContext) autoCreateNamespace(tasks syncTasks) syncTasks {
 	}
 
 	if isNamespaceCreationNeeded {
-
-		a := make([]map[string]string, 2)
-		for k, v := range sc.nsMetaData {
-			if t, ok := v.(interface{}); ok {
-				// Convert map to json string
-				switch jsonStr, _ := json.Marshal(t); jsonStr != nil {
-				case k == common.Annotation:
-					err := json.Unmarshal(jsonStr, &a[0])
-					if err != nil {
-						sc.setOperationPhase(common.OperationFailed, fmt.Sprintf("Namespace auto creation failed due to invalid json: %s", err))
-						return tasks
-					}
-				case k == common.Labels:
-					err := json.Unmarshal(jsonStr, &a[1])
-					if err != nil {
-						sc.setOperationPhase(common.OperationFailed, fmt.Sprintf("Namespace auto creation failed due to invalid: %s", err))
-						return tasks
-					}
-				default:
-					continue
-				}
-			}
-		}
-
-		nsSpec := &v1.Namespace{TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: kube.NamespaceKind}, ObjectMeta: metav1.ObjectMeta{Name: sc.namespace, Annotations: a[0], Labels: a[1]}}
+		nsSpec := &v1.Namespace{TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: kube.NamespaceKind}, ObjectMeta: metav1.ObjectMeta{Name: sc.namespace, Annotations: sc.createNamespaceAnnotations, Labels: sc.createNamespaceLabels}}
 
 		unstructuredObj, err := kube.ToUnstructured(nsSpec)
 		if err == nil {
