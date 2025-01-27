@@ -348,3 +348,24 @@ loop:
 	}
 	return g.Wait()
 }
+
+// RunAllAsyncWithContext runs the given action in parallel for count times. The action is passed the errgroup's context
+// and the index of the current iteration. If action properly respects the context, RunAllAsyncWithContext will return
+// immediately when an error is returned by any goroutine.
+func RunAllAsyncWithContext(ctx context.Context, count int, action func(ctx context.Context, i int) error) error {
+	g, ctx := errgroup.WithContext(ctx)
+loop:
+	for i := 0; i < count; i++ {
+		index := i
+		g.Go(func() error {
+			return action(ctx, index)
+		})
+		select {
+		case <-ctx.Done():
+			// Something went wrong already, stop spawning tasks.
+			break loop
+		default:
+		}
+	}
+	return g.Wait()
+}

@@ -1,11 +1,14 @@
 package kube
 
 import (
+	"context"
 	_ "embed"
 	"encoding/json"
+	"errors"
 	openapi_v2 "github.com/google/gnostic-models/openapiv2"
 	"github.com/stretchr/testify/require"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"k8s.io/klog/v2/textlogger"
@@ -67,6 +70,43 @@ func TestConvertToVersion(t *testing.T) {
 		_, err := kubectl.newGVKParser(client)
 		require.NoError(t, err)
 	})
+}
+
+func Test_RunAllAsync(t *testing.T) {
+	// Demonstrate that RunAllAsync will wait for all goroutines to finish, even if some of them return an error.
+	startTime := time.Now()
+	err := RunAllAsync(2, func(i int) error {
+		if i == 0 {
+			return errors.New("error 0")
+		}
+		time.Sleep(time.Second)
+		return errors.New("error 1")
+	})
+	finishTime := time.Now()
+	require.Error(t, err)
+	require.Containsf(t, err.Error(), "error 0", "expected to get the first error returned")
+	assert.True(t, finishTime.Sub(startTime) >= time.Second)
+}
+
+func Test_RunAllAsyncWithContext(t *testing.T) {
+	// In contrast to RunAllAsync, RunAllAsyncWithContext should return immediately when an error is returned by a
+	// goroutine, assuming the goroutine properly respects the context.
+	startTime := time.Now()
+	err := RunAllAsyncWithContext(context.Background(), 2, func(ctx context.Context, i int) error {
+		if i == 0 {
+			return errors.New("error 0")
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(time.Second):
+			return errors.New("error 1")
+		}
+	})
+	finishTime := time.Now()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "error 0", "expected to get the first error returned")
+	assert.True(t, finishTime.Sub(startTime) < time.Second)
 }
 
 /**

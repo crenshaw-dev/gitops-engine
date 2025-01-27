@@ -923,11 +923,11 @@ func (c *clusterCache) sync() error {
 
 	// Each API is processed in parallel, so we need to take out a lock when we update clusterCache fields.
 	lock := sync.Mutex{}
-	err = kube.RunAllAsync(len(apis), func(i int) error {
+	err = kube.RunAllAsyncWithContext(context.Background(), len(apis), func(ctx context.Context, i int) error {
 		api := apis[i]
 
 		lock.Lock()
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(ctx)
 		info := &apiMeta{namespaced: api.Meta.Namespaced, watchCancel: cancel}
 		c.apisMeta[api.GroupKind] = info
 		c.namespacedResources[api.GroupKind] = api.Meta.Namespaced
@@ -935,7 +935,7 @@ func (c *clusterCache) sync() error {
 
 		return c.processApi(client, api, func(resClient dynamic.ResourceInterface, ns string) error {
 			resourceVersion, err := c.listResources(ctx, resClient, func(listPager *pager.ListPager) error {
-				return listPager.EachListItem(context.Background(), metav1.ListOptions{}, func(obj runtime.Object) error {
+				return listPager.EachListItem(ctx, metav1.ListOptions{}, func(obj runtime.Object) error {
 					if un, ok := obj.(*unstructured.Unstructured); !ok {
 						return fmt.Errorf("object %s/%s has an unexpected type", un.GroupVersionKind().String(), un.GetName())
 					} else {

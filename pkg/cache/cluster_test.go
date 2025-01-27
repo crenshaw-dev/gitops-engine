@@ -146,6 +146,63 @@ func getChildren(cluster *clusterCache, un *unstructured.Unstructured) []*Resour
 	return hierarchy[1:]
 }
 
+// Benchmark_sync is meant to simulate cluster initialization when populateResourceInfoHandler does nontrivial work.
+func Benchmark_sync(t *testing.B) {
+	var resources = []runtime.Object{}
+	for i := 0; i < 1000; i++ {
+		resources = append(resources, &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      fmt.Sprintf("pod-%d", i),
+				Namespace: "default",
+			},
+		}, &appsv1.ReplicaSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      fmt.Sprintf("rs-%d", i),
+				Namespace: "default",
+			},
+		}, &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      fmt.Sprintf("deploy-%d", i),
+				Namespace: "default",
+			},
+		}, &appsv1.StatefulSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      fmt.Sprintf("sts-%d", i),
+				Namespace: "default",
+			},
+		}, &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      fmt.Sprintf("pod-%d", i),
+				Namespace: "default-2",
+			},
+		}, &appsv1.ReplicaSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      fmt.Sprintf("rs-%d", i),
+				Namespace: "default-2",
+			},
+		}, &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      fmt.Sprintf("deploy-%d", i),
+				Namespace: "default-2",
+			},
+		}, &appsv1.StatefulSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      fmt.Sprintf("sts-%d", i),
+				Namespace: "default-2",
+			},
+		})
+	}
+
+	c := newClusterWithOptions(t, []UpdateSettingsFunc{SetNamespaces([]string{"default", "default-2"}), SetListSemaphore(semaphore.NewWeighted(2))}, resources...)
+
+	t.ResetTimer()
+
+	for n := 0; n < t.N; n++ {
+		err := c.sync()
+		require.NoError(t, err)
+	}
+}
+
 func TestEnsureSynced(t *testing.T) {
 	obj1 := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{
