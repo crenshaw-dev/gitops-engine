@@ -3,6 +3,7 @@ package cache
 import (
 	"context"
 	"fmt"
+	"k8s.io/utils/ptr"
 	"runtime/debug"
 	"sort"
 	"strings"
@@ -603,6 +604,9 @@ func (c *clusterCache) listResources(ctx context.Context, resClient dynamic.Reso
 		listRetry.Steps = int(c.listRetryLimit)
 		err := retry.OnError(listRetry, c.listRetryFunc, func() error {
 			var ierr error
+			opts.Watch = true
+			opts.AllowWatchBookmarks = true
+			opts.SendInitialEvents = ptr.To(true)
 			res, ierr = resClient.List(ctx, opts)
 			if ierr != nil {
 				// Log out a retry
