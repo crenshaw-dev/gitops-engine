@@ -607,6 +607,7 @@ func (c *clusterCache) listResources(ctx context.Context, resClient dynamic.Reso
 			opts.Watch = true
 			opts.AllowWatchBookmarks = true
 			opts.SendInitialEvents = ptr.To(true)
+			opts.ResourceVersionMatch = metav1.ResourceVersionMatchNotOlderThan
 			res, ierr = resClient.List(ctx, opts)
 			if ierr != nil {
 				// Log out a retry
